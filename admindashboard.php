@@ -7,10 +7,9 @@ $conn = sqlsrv_connect($server, $opts);
 
 if (!$conn) { die("Database error"); }
 
-// Require Admin Role
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-  //  header('Location: login.php');
-  //  exit();
+if (!isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'admin') {
+    header('Location: login.php');
+    exit();
 }
 
 $name = $_SESSION['first_name'] ?? 'Admin';
@@ -120,7 +119,7 @@ function timeAgo($datetime) {
 </header>
 
 <div class="page-wrap">
-    <?php // include 'admin_sidebar.php'; ?>
+    <?php include 'adminsidebar.php'; ?>
 
     <main class="content-area">
         <div class="d-flex justify-content-between align-items-center mb-4">
@@ -236,7 +235,6 @@ function timeAgo($datetime) {
 <script>
     function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
 
-    // Dynamic Data from PHP for Visits Chart
     const visitsLabels = <?= $visitLabels ?>;
     const visitsData = <?= $visitData ?>;
 

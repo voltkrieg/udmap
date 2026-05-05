@@ -2,10 +2,13 @@
 session_start();
 
 if (isset($_SESSION['user_id'])) {
-    header('Location: dashboard.php');
+    if ($_SESSION['user_role'] === 'admin') {
+        header('Location: admindashboard.php');
+    } else {
+        header('Location: dashboard.php');
+    }
     exit();
 }
-
 $serverName = "DESKTOP-KILKG9D\SQLEXPRESS";
 $connectionOptions = array(
     "Database"               => "UDMapDB",
@@ -43,18 +46,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_submit'])) {
             $diff = $row['LOCKOUT_TIME']->diff($now);
             $error = "Account locked. Try again in " . $diff->i . " minutes.";
         } else {
-            if (password_verify($password, $row['PASSWORD'])) {
-                sqlsrv_query($conn, "UPDATE [USER] SET FAILED_ATTEMPTS = 0, LOCKOUT_TIME = NULL WHERE USERID = ?", array($row['USERID']));
+          if (password_verify($password, $row['PASSWORD'])) {
+              sqlsrv_query($conn, "UPDATE [USER] SET FAILED_ATTEMPTS = 0, LOCKOUT_TIME = NULL WHERE USERID = ?", array($row['USERID']));
 
-                $_SESSION['user_id']   = $row['USERID'];
-                $_SESSION['email']     = $row['EMAIL'];
-                $_SESSION['user_role'] = $row['USERTYPE'];
-                $_SESSION['full_name'] = $row['FIRSTNAME'] . ' ' . $row['LASTNAME'];
+              $_SESSION['user_id']   = $row['USERID'];
+              $_SESSION['email']     = $row['EMAIL'];
+              $_SESSION['user_role'] = $row['USERTYPE'];
+              $_SESSION['full_name'] = $row['FIRSTNAME'] . ' ' . $row['LASTNAME'];
 
-                header('Location: dashboard.php');
-                exit();
-
-            } else {
+              // --- NEW REDIRECT LOGIC ---
+              if ($row['USERTYPE'] === 'admin') {
+                  header('Location: admindashboard.php');
+              } else {
+                  header('Location: dashboard.php');
+              }
+              exit();
+          } else {
                 $attempts = $row['FAILED_ATTEMPTS'] + 1;
                 $lockoutUntil = null;
                 

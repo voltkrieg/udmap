@@ -7,7 +7,7 @@ $conn = sqlsrv_connect($server, $opts);
 
 if (!$conn) { die("Database error"); }
 
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
+if (!isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'admin') {
     header('Location: login.php');
     exit();
 }
@@ -105,7 +105,7 @@ function buildUrl($targetPage) {
 </header>
 
 <div class="page-wrap">
-    <?php // include 'admin_sidebar.php'; ?>
+    <?php include 'adminsidebar.php'; ?>
 
     <main class="content-area">
         <div class="d-flex justify-content-between align-items-center mb-4">
