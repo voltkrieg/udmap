@@ -1,7 +1,6 @@
 <?php
 session_start();
 
-/* ── Database Connection (MSSQL) ── */
 $serverName = "DESKTOP-KILKG9D\SQLEXPRESS";
 $connectionOptions = array(
     "Database"               => "UDMapDB",
@@ -16,7 +15,6 @@ if (!$conn) {
     $dbError = "Connection failed: " . print_r(sqlsrv_errors(), true); 
 }
 
-/* ── Auth guard ── */
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
     exit();
@@ -25,7 +23,6 @@ if (!isset($_SESSION['user_id'])) {
 $userId    = (int)$_SESSION['user_id'];
 $firstName = htmlspecialchars($_SESSION['first_name'] ?? 'User');
 
-/* ── Helpers ── */
 function fmtTime($t): string {
     if ($t instanceof DateTime) {
         return $t->format('h:i A');

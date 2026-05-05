@@ -8,7 +8,7 @@ $conn = sqlsrv_connect($server, $opts);
 if (!$conn) { die("Database error"); }
 
 // Require Admin Role
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
   //  header('Location: login.php');
   //  exit();
 }

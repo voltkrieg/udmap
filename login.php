@@ -25,47 +25,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_submit'])) {
     $identifier = trim($_POST['identifier']);  
     $password   = $_POST['password'];
 
+    // REMOVED: Strict password regex requirements
+    /* 
     $regex = '/^(?=.*[!@#$%^&*(),.?":{}|<>]).{16,32}$/';
     if (!preg_match($regex, $password)) {
         $error = 'Security Policy: Password must be 16-32 characters and include a special character.';
-    } else {
-        $tsql = "SELECT USERID, FIRSTNAME, LASTNAME, PASSWORD, USERTYPE, EMAIL, FAILED_ATTEMPTS, LOCKOUT_TIME FROM [USER] WHERE (EMAIL = ? OR STUDENTID = ?) AND USERTYPE = ?";
-        $stmt = sqlsrv_query($conn, $tsql, array($identifier, $identifier, $role));
+    } else { ... }
+    */
 
-        if ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
-            $now = new DateTime();
-            
-            if ($row['LOCKOUT_TIME'] && $row['LOCKOUT_TIME'] > $now) {
-                $diff = $row['LOCKOUT_TIME']->diff($now);
-                $error = "Account locked. Try again in " . $diff->i . " minutes.";
-            } else {
-                if (password_verify($password, $row['PASSWORD'])) {
-                    sqlsrv_query($conn, "UPDATE [USER] SET FAILED_ATTEMPTS = 0, LOCKOUT_TIME = NULL WHERE USERID = ?", array($row['USERID']));
+    $tsql = "SELECT USERID, FIRSTNAME, LASTNAME, PASSWORD, USERTYPE, EMAIL, FAILED_ATTEMPTS, LOCKOUT_TIME FROM [USER] WHERE (EMAIL = ? OR STUDENTID = ?) AND USERTYPE = ?";
+    $stmt = sqlsrv_query($conn, $tsql, array($identifier, $identifier, $role));
 
-                    $_SESSION['user_id']   = $row['USERID'];
-                    $_SESSION['email']     = $row['EMAIL'];
-                    $_SESSION['user_role'] = $row['USERTYPE'];
-                    $_SESSION['full_name'] = $row['FIRSTNAME'] . ' ' . $row['LASTNAME'];
-
-                    header('Location: dashboard.php');
-                    exit();
-
-                } else {
-                    $attempts = $row['FAILED_ATTEMPTS'] + 1;
-                    $lockoutUntil = null;
-                    
-                    if ($attempts >= 3) {
-                        $lockoutUntil = date('Y-m-d H:i:s', strtotime('+15 minutes'));
-                        $error = 'Too many failed attempts. Account locked for 15 minutes.';
-                    } else {
-                        $error = 'Invalid password. Attempt ' . $attempts . ' of 3.';
-                    }
-                    sqlsrv_query($conn, "UPDATE [USER] SET FAILED_ATTEMPTS = ?, LOCKOUT_TIME = ? WHERE USERID = ?", array($attempts, $lockoutUntil, $row['USERID']));
-                }
-            }
+    if ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+        $now = new DateTime();
+        
+        if ($row['LOCKOUT_TIME'] && $row['LOCKOUT_TIME'] > $now) {
+            $diff = $row['LOCKOUT_TIME']->diff($now);
+            $error = "Account locked. Try again in " . $diff->i . " minutes.";
         } else {
-            $error = 'Account not found for the selected role.';
+            if (password_verify($password, $row['PASSWORD'])) {
+                sqlsrv_query($conn, "UPDATE [USER] SET FAILED_ATTEMPTS = 0, LOCKOUT_TIME = NULL WHERE USERID = ?", array($row['USERID']));
+
+                $_SESSION['user_id']   = $row['USERID'];
+                $_SESSION['email']     = $row['EMAIL'];
+                $_SESSION['user_role'] = $row['USERTYPE'];
+                $_SESSION['full_name'] = $row['FIRSTNAME'] . ' ' . $row['LASTNAME'];
+
+                header('Location: dashboard.php');
+                exit();
+
+            } else {
+                $attempts = $row['FAILED_ATTEMPTS'] + 1;
+                $lockoutUntil = null;
+                
+                if ($attempts >= 3) {
+                    $lockoutUntil = date('Y-m-d H:i:s', strtotime('+15 minutes'));
+                    $error = 'Too many failed attempts. Account locked for 15 minutes.';
+                } else {
+                    $error = 'Invalid password. Attempt ' . $attempts . ' of 3.';
+                }
+                sqlsrv_query($conn, "UPDATE [USER] SET FAILED_ATTEMPTS = ?, LOCKOUT_TIME = ? WHERE USERID = ?", array($attempts, $lockoutUntil, $row['USERID']));
+            }
         }
+    } else {
+        $error = 'Account not found for the selected role.';
     }
 }
 ?>
