@@ -48,7 +48,10 @@ if ($conn) {
 /* ── Query: Map Locations ── */
 $locations = [];
 if ($conn) {
-    $sqlLoc = "SELECT NAME, CAST(LATITUDE AS FLOAT) AS LATITUDE, CAST(LONGITUDE AS FLOAT) AS LONGITUDE, ICON, BLDGTYPE FROM LOCATIONS WHERE ISACTIVE = 1";
+    $sqlLoc = "SELECT NAME, LONGNAME, DESCRIPTION, CAST(LATITUDE AS FLOAT) AS LATITUDE, CAST(LONGITUDE AS FLOAT) AS LONGITUDE, ICON, BLDGTYPE 
+                FROM LOCATIONS 
+                WHERE ISACTIVE = 1 AND UPPER(LTRIM(RTRIM(BLDGTYPE))) = 'Sports'
+                ORDER BY LONGNAME, NAME";
     $stmtLoc = sqlsrv_query($conn, $sqlLoc);
     if ($stmtLoc) {
         while ($row = sqlsrv_fetch_array($stmtLoc, SQLSRV_FETCH_ASSOC)) {

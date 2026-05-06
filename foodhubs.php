@@ -23,25 +23,11 @@ if (!isset($_SESSION['user_id'])) {
 $userId    = (int)$_SESSION['user_id'];
 $firstName = htmlspecialchars($_SESSION['first_name'] ?? 'User');
 
-/* ── Query: Map Locations (All active locations to populate the map) ── */
-$locations = [];
-if ($conn) {
-    $sqlLoc = "SELECT NAME, LONGNAME, DESCRIPTION, CAST(LATITUDE AS FLOAT) AS LATITUDE, CAST(LONGITUDE AS FLOAT) AS LONGITUDE, ICON, BLDGTYPE FROM LOCATIONS WHERE ISACTIVE = 1";
-    $stmtLoc = sqlsrv_query($conn, $sqlLoc);
-    if ($stmtLoc) {
-        while ($row = sqlsrv_fetch_array($stmtLoc, SQLSRV_FETCH_ASSOC)) {
-            $locations[] = $row;
-        }
-    }
-}
-
-/* ── Query: Food Hubs Only (For the right panel list) ── */
 $foodHubs = [];
 if ($conn) {
-    // Assuming food hubs have a BLDGTYPE of 'FOOD'
     $sqlFood = "SELECT NAME, LONGNAME, DESCRIPTION, CAST(LATITUDE AS FLOAT) AS LATITUDE, CAST(LONGITUDE AS FLOAT) AS LONGITUDE, ICON, BLDGTYPE 
                 FROM LOCATIONS 
-                WHERE ISACTIVE = 1 AND UPPER(LTRIM(RTRIM(BLDGTYPE))) = 'FOOD'
+                WHERE ISACTIVE = 1 AND UPPER(LTRIM(RTRIM(BLDGTYPE))) = 'Food Hubs'
                 ORDER BY LONGNAME, NAME";
     $stmtFood = sqlsrv_query($conn, $sqlFood);
     if ($stmtFood) {
@@ -193,7 +179,8 @@ body{margin:0;font-family:'Nunito',sans-serif;background:#f4f4f4;color:#111;disp
 
 <script>
 // --- Data Setup ---
-var locations = <?= json_encode($locations) ?>;
+// CHANGED: We now pass the $foodHubs array directly to the map script
+var locations = <?= json_encode($foodHubs) ?>;
 var markers2D = {};
 var markers3D = {};
 var centerCoords = [14.32464, 120.96016]; // [lat, lng]
@@ -230,9 +217,9 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20 
 
 locations.forEach(function(loc) {
     var type = loc.BLDGTYPE ? loc.BLDGTYPE.toLowerCase() : '';
-    var pinColor = typeColors[type] || '#2ECC40';
+    var pinColor = typeColors[type] || '#f39c12'; // Default to orange for food hubs
     
-    var iconHtml = `<div style="background:${pinColor}; width:28px; height:28px; border-radius:50%; border:2px solid white; display:flex; align-items:center; justify-content:center; color:white; font-size:14px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); cursor: pointer;"><i class="bi ${loc.ICON || 'bi-geo-alt'}"></i></div>`;
+    var iconHtml = `<div style="background:${pinColor}; width:28px; height:28px; border-radius:50%; border:2px solid white; display:flex; align-items:center; justify-content:center; color:white; font-size:14px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); cursor: pointer;"><i class="bi ${loc.ICON || 'bi-shop'}"></i></div>`;
     
     var marker = L.marker([loc.LATITUDE, loc.LONGITUDE], {
         icon: L.divIcon({ html: iconHtml, className: '', iconSize: [28, 28], iconAnchor: [14, 14] })
@@ -284,10 +271,10 @@ map3d.on('load', () => {
 // Add Markers to 3D Map
 locations.forEach(function(loc) {
     var type = loc.BLDGTYPE ? loc.BLDGTYPE.toLowerCase() : '';
-    var pinColor = typeColors[type] || '#2ECC40';
+    var pinColor = typeColors[type] || '#f39c12';
     
     var el = document.createElement('div');
-    el.innerHTML = `<div style="background:${pinColor}; width:28px; height:28px; border-radius:50%; border:2px solid white; display:flex; align-items:center; justify-content:center; color:white; font-size:14px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); cursor: pointer; transition: transform 0.2s;"><i class="bi ${loc.ICON || 'bi-geo-alt'}"></i></div>`;
+    el.innerHTML = `<div style="background:${pinColor}; width:28px; height:28px; border-radius:50%; border:2px solid white; display:flex; align-items:center; justify-content:center; color:white; font-size:14px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); cursor: pointer; transition: transform 0.2s;"><i class="bi ${loc.ICON || 'bi-shop'}"></i></div>`;
     
     el.addEventListener('mouseenter', () => el.style.transform = 'scale(1.2)');
     el.addEventListener('mouseleave', () => el.style.transform = 'scale(1)');

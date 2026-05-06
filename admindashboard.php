@@ -12,12 +12,13 @@ if (!isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'admin') {
     exit();
 }
 
-$name = $_SESSION['first_name'] ?? 'Admin';
+$name = $_SESSION['full_name'] ?? 'Admin'; // Adjusted to use full_name
 
+// Overview Stats
 $userQuery = sqlsrv_query($conn, "SELECT COUNT(*) as Total FROM [USER]");
 $totalUsers = $userQuery ? sqlsrv_fetch_array($userQuery)['Total'] : 0;
 
-$activeQuery = sqlsrv_query($conn, "SELECT COUNT(*) as Active FROM [USER] WHERE LAST_ACTIVITY >= DATEADD(minute, -30, GETDATE())");
+$activeQuery = sqlsrv_query($conn, "SELECT COUNT(*) as Active FROM [USER] WHERE ISACTIVE = 1");
 $activeUsers = $activeQuery ? sqlsrv_fetch_array($activeQuery)['Active'] : 0;
 
 $nodeQuery = sqlsrv_query($conn, "SELECT COUNT(*) as Nodes FROM LOCATIONS");
@@ -27,37 +28,27 @@ $eventQuery = sqlsrv_query($conn, "SELECT COUNT(*) as TodayEvents FROM EVENTS WH
 $totalEvents = $eventQuery ? sqlsrv_fetch_array($eventQuery)['TodayEvents'] : 0;
 
 
-$visitQuery = sqlsrv_query($conn, "SELECT TOP 5 NAME, TOTAL_SEARCHES FROM LOCATIONS ORDER BY TOTAL_SEARCHES DESC");
-$vLabels = [];
-$vData = [];
+// --- NEW: Scrollable List Queries ---
+
+// 1. Most Visited Locations
+$visitQuery = sqlsrv_query($conn, "SELECT TOP 50 NAME, LONGNAME, TOTAL_SEARCHES FROM LOCATIONS ORDER BY TOTAL_SEARCHES DESC");
+$visitedLocations = [];
 if ($visitQuery) {
     while ($row = sqlsrv_fetch_array($visitQuery, SQLSRV_FETCH_ASSOC)) {
-        $vLabels[] = $row['NAME'];
-        $vData[] = $row['TOTAL_SEARCHES'];
+        $visitedLocations[] = $row;
     }
 }
-$visitLabels = json_encode($vLabels);
-$visitData = json_encode($vData);
 
-$loginQuery = sqlsrv_query($conn, "
-    SELECT CAST(LOGIN_TIME AS DATE) as LogDate, COUNT(*) as DailyCount 
-    FROM USER_LOGINS 
-    WHERE LOGIN_TIME >= DATEADD(day, -7, GETDATE()) 
-    GROUP BY CAST(LOGIN_TIME AS DATE) 
-    ORDER BY LogDate ASC
-");
-
-$lLabels = [];
-$lData = [];
+// 2. Latest Logins (Using the USERLOGS audit table)
+$loginQuery = sqlsrv_query($conn, "SELECT TOP 50 USERID, DETAILS, TIMESTMP FROM [USERLOGS] WHERE ACTION = 'LOGIN_SUCCESS' ORDER BY TIMESTMP DESC");
+$recentLogins = [];
 if ($loginQuery) {
     while ($row = sqlsrv_fetch_array($loginQuery, SQLSRV_FETCH_ASSOC)) {
-        $lLabels[] = $row['LogDate']->format('D'); // e.g., 'Mon', 'Tue'
-        $lData[] = $row['DailyCount'];
+        $recentLogins[] = $row;
     }
 }
-$loginsLabels = json_encode(empty($lLabels) ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] : $lLabels);
-$loginsData = json_encode(empty($lData) ? [0, 0, 0, 0, 0, 0, 0] : $lData);
 
+// 3. Routing Activity
 $activityQuery = sqlsrv_query($conn, "SELECT TOP 5 USER_ID, ACTION, DESTINATION, METHOD, TIMESTAMP FROM ACTIVITY_LOGS ORDER BY TIMESTAMP DESC");
 $recentActivities = [];
 if ($activityQuery) {
@@ -100,7 +91,16 @@ function timeAgo($datetime) {
         .bg-purple { background: #6f42c1; }
         .bg-orange { background: #fd7e14; }
         
-        .chart-container { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); height: 100%; }
+        .content-card { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); height: 100%; }
+        
+        /* Custom Scrollable List Styles */
+        .scrollable-list { max-height: 350px; overflow-y: auto; padding-right: 8px; }
+        .scrollable-list::-webkit-scrollbar { width: 6px; }
+        .scrollable-list::-webkit-scrollbar-thumb { background-color: #ddd; border-radius: 10px; }
+        .scrollable-list::-webkit-scrollbar-track { background: transparent; }
+        
+        .list-item { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid #f0f0f0; }
+        .list-item:last-child { border-bottom: none; }
         
         @media(max-width: 960px) { .content-area { margin-left: 0; } }
     </style>
@@ -113,7 +113,7 @@ function timeAgo($datetime) {
         <span class="fw-bolder fs-5 text-success">UDMap <span class="text-white">Admin</span></span>
     </div>
     <div class="d-flex align-items-center gap-3">
-        <span class="small fw-bold">System Status: <i class="bi bi-circle-fill text-success" style="font-size: 10px;"></i> Online</span>
+        <span class="small fw-bold d-none d-sm-inline">System Status: <i class="bi bi-circle-fill text-success" style="font-size: 10px;"></i> Online</span>
         <span class="small fw-bold border-start ps-3">Hello, <?= htmlspecialchars($name) ?></span>
     </div>
 </header>
@@ -150,7 +150,7 @@ function timeAgo($datetime) {
             <div class="col-md-3">
                 <div class="stat-card">
                     <div>
-                        <p class="text-muted small fw-bold mb-1">Registered Map Nodes</p>
+                        <p class="text-muted small fw-bold mb-1">Registered Nodes</p>
                         <h3 class="fw-bolder mb-0"><?= number_format($totalNodes) ?></h3>
                     </div>
                     <div class="icon-box bg-purple"><i class="bi bi-geo-alt-fill"></i></div>
@@ -167,25 +167,77 @@ function timeAgo($datetime) {
             </div>
         </div>
 
-        <!-- 2. Charts Row -->
+        <!-- 2. Scrollable Lists Row -->
         <div class="row g-4 mb-4">
-            <div class="col-md-7">
-                <div class="chart-container">
-                    <h5 class="fw-bold mb-4">Most Visited / Searched Buildings</h5>
-                    <canvas id="visitsChart" height="100"></canvas>
+            <!-- Most Visited Locations -->
+            <div class="col-md-6">
+                <div class="content-card">
+                    <h5 class="fw-bold mb-3 d-flex justify-content-between align-items-center">
+                        Most Visited Buildings
+                        <i class="bi bi-geo-fill text-muted fs-5"></i>
+                    </h5>
+                    <div class="scrollable-list">
+                        <?php if (empty($visitedLocations)): ?>
+                            <p class="text-muted small py-3">No location data available.</p>
+                        <?php else: ?>
+                            <?php foreach($visitedLocations as $index => $loc): ?>
+                                <div class="list-item">
+                                    <div class="d-flex align-items-center gap-3">
+                                        <span class="fw-bolder text-muted">#<?= $index + 1 ?></span>
+                                        <div>
+                                            <div class="fw-bold"><?= htmlspecialchars($loc['NAME']) ?></div>
+                                            <div class="text-muted" style="font-size: 11px;">
+                                                <?= htmlspecialchars($loc['LONGNAME'] ?? 'Campus Location') ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success rounded-pill px-3 py-2">
+                                        <?= number_format($loc['TOTAL_SEARCHES'] ?? 0) ?> visits
+                                    </span>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
             
-            <div class="col-md-5">
-                <div class="chart-container">
-                    <h5 class="fw-bold mb-4">User Logins (Last 7 Days)</h5>
-                    <canvas id="loginsChart" height="150"></canvas>
+            <!-- Latest Logins -->
+            <div class="col-md-6">
+                <div class="content-card">
+                    <h5 class="fw-bold mb-3 d-flex justify-content-between align-items-center">
+                        Recent User Logins
+                        <i class="bi bi-person-check-fill text-muted fs-5"></i>
+                    </h5>
+                    <div class="scrollable-list">
+                        <?php if (empty($recentLogins)): ?>
+                            <p class="text-muted small py-3">No recent logins found.</p>
+                        <?php else: ?>
+                            <?php foreach($recentLogins as $login): ?>
+                                <div class="list-item">
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="icon-box bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                            <i class="bi bi-person-fill"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-bold">User #<?= htmlspecialchars($login['USERID']) ?></div>
+                                            <div class="text-muted" style="font-size: 11px;">
+                                                <?= htmlspecialchars($login['DETAILS']) ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span class="text-muted small fw-bold">
+                                        <?= timeAgo($login['TIMESTMP']) ?>
+                                    </span>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- 3. Recent Activity Table -->
-        <div class="chart-container">
+        <div class="content-card">
             <h5 class="fw-bold mb-3">Recent Routing Activity</h5>
             <div class="table-responsive">
                 <table class="table table-hover align-middle">
@@ -227,60 +279,9 @@ function timeAgo($datetime) {
     </main>
 </div>
 
-<!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<!-- Chart.js for Admin Analytics -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <script>
     function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
-
-    const visitsLabels = <?= $visitLabels ?>;
-    const visitsData = <?= $visitData ?>;
-
-    const ctxVisits = document.getElementById('visitsChart').getContext('2d');
-    new Chart(ctxVisits, {
-        type: 'bar',
-        data: {
-            labels: visitsLabels,
-            datasets: [{
-                label: 'Total Visits/Routes',
-                data: visitsData,
-                backgroundColor: '#2ECC40',
-                borderRadius: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true } }
-        }
-    });
-
-    const loginsLabels = <?= $loginsLabels ?>;
-    const loginsData = <?= $loginsData ?>;
-
-    const ctxLogins = document.getElementById('loginsChart').getContext('2d');
-    new Chart(ctxLogins, {
-        type: 'line',
-        data: {
-            labels: loginsLabels,
-            datasets: [{
-                label: 'Active Logins',
-                data: loginsData,
-                borderColor: '#007bff',
-                backgroundColor: 'rgba(0, 123, 255, 0.1)',
-                borderWidth: 3,
-                fill: true,
-                tension: 0.3
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true } }
-        }
-    });
 </script>
 </body>
 </html>

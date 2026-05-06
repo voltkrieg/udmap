@@ -28,6 +28,20 @@ $events = [];
 $eRes = sqlsrv_query($conn, "SELECT TOP 2 * FROM EVENTS WHERE DATE >= CAST(GETDATE() AS DATE) ORDER BY DATE, TIMESTART");
 while ($r = sqlsrv_fetch_array($eRes, SQLSRV_FETCH_ASSOC)) { $events[] = $r; }
 
+
+$locationsArr = [];
+$locQuery = "SELECT BLDGID, NAME, BLDGTYPE, LONGNAME, LATITUDE, LONGITUDE, DESCRIPTION, ISACTIVE, FLOORS, ICON FROM LOCATIONS WHERE ISACTIVE = 1";
+$locRes = sqlsrv_query($conn, $locQuery);
+
+if ($locRes) {
+    while ($row = sqlsrv_fetch_array($locRes, SQLSRV_FETCH_ASSOC)) {
+        // Ensure lat/lng are cast to floats so JavaScript processes them correctly
+        $row['LATITUDE'] = (float)$row['LATITUDE'];
+        $row['LONGITUDE'] = (float)$row['LONGITUDE'];
+        $locationsArr[] = $row;
+    }
+}
+
 function timeFix($t) { 
     return ($t instanceof DateTime) ? $t->format('h:i A') : date('h:i A', strtotime($t)); 
 }
@@ -146,15 +160,20 @@ function timeFix($t) {
 
 <script>
 // --- Data Setup ---
-var locations = [
-    { BLDGID: 1, NAME: 'ULS', BLDGTYPE: 'SPORT', LONGNAME: 'Ugnayang La Salle', LATITUDE: 14.32672, LONGITUDE: 120.95739, DESCRIPTION: 'Ugnayang La Salle', ISACTIVE: 1, FLOORS: 2, ICON: 'bi-dribbble' },
-    { BLDGID: 2, NAME: 'MLH', BLDGTYPE: 'CLASS', LONGNAME: 'Maria Salome Llanera Hall', LATITUDE: 14.322719, LONGITUDE: 120.958470, DESCRIPTION: 'CEAT Building', ISACTIVE: 1, FLOORS: 2, ICON: 'bi-mortarboard-fill' },
-    { BLDGID: 3, NAME: 'MTH', BLDGTYPE: 'CLASS', LONGNAME: 'Mariano Trias Hall', LATITUDE: 14.323987, LONGITUDE: 120.958840, DESCRIPTION: 'MTH Building', ISACTIVE: 1, FLOORS: 2, ICON: 'bi-mortarboard-fill' }
-];
+var locations = <?= json_encode($locationsArr, JSON_NUMERIC_CHECK) ?>;
 
 var markers2D = {};
 var markers3D = {};
 var centerCoords = [14.32464, 120.96016]; // [lat, lng]
+
+// Color mapping object based on building types
+const typeColors = {
+    'Academic': '#2ECC40',
+    'Services': '#dc3545',
+    'Sports': '#6f42c1',
+    'Food Hubs': '#fd7e14',
+    'Offices': '#0d6efd'
+};
 
 // Helper function to create interactive popup content WITH Routing Buttons
 function createPopupContent(loc) {
@@ -180,7 +199,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20 
 
 locations.forEach(function(loc) {
     if(loc.ISACTIVE) {
-        var pinColor = loc.BLDGTYPE === 'SPORT' ? '#9b59b6' : '#2ECC40';
+        var pinColor = typeColors[loc.BLDGTYPE] || '#6c757d'; // Default grey if type not found
         var iconHtml = `<div style="background:${pinColor}; width:28px; height:28px; border-radius:50%; border:2px solid white; display:flex; align-items:center; justify-content:center; color:white; font-size:14px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); cursor: pointer;"><i class="bi ${loc.ICON || 'bi-geo-alt'}"></i></div>`;
         
         var marker = L.marker([loc.LATITUDE, loc.LONGITUDE], {
@@ -238,7 +257,7 @@ map3d.on('load', () => {
 // Add Markers to 3D Map
 locations.forEach(function(loc) {
     if(loc.ISACTIVE) {
-        var pinColor = loc.BLDGTYPE === 'SPORT' ? '#9b59b6' : '#2ECC40';
+        var pinColor = typeColors[loc.BLDGTYPE] || '#6c757d'; // Default grey if type not found
         
         var el = document.createElement('div');
         el.innerHTML = `<div style="background:${pinColor}; width:28px; height:28px; border-radius:50%; border:2px solid white; display:flex; align-items:center; justify-content:center; color:white; font-size:14px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); cursor: pointer; transition: transform 0.2s;"><i class="bi ${loc.ICON || 'bi-geo-alt'}"></i></div>`;

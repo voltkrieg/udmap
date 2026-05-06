@@ -1,20 +1,23 @@
 <?php
 session_start();
 
+function logAudit($conn, $userId, $action, $details) {
+    $ip = $_SERVER['REMOTE_ADDR'];
+    $tsql = "INSERT INTO USERLOGS (USERID, ACTION, DETAILS, IPADD) VALUES (?, ?, ?, ?)";
+    sqlsrv_query($conn, $tsql, array($userId, $action, $details, $ip));
+}
+
 if (isset($_SESSION['user_id'])) {
-    if ($_SESSION['user_role'] === 'admin') {
-        header('Location: admindashboard.php');
-    } else {
-        header('Location: dashboard.php');
-    }
+    header('Location: ' . ($_SESSION['user_role'] === 'admin' ? 'admindashboard.php' : 'dashboard.php'));
     exit();
 }
+
 $serverName = "DESKTOP-KILKG9D\SQLEXPRESS";
 $connectionOptions = array(
-    "Database"               => "UDMapDB",
-    "Uid"                    => "", 
-    "PWD"                    => "",
-    "Encrypt"                => true, 
+    "Database" => "UDMapDB",
+    "Uid" => "", 
+    "PWD" => "",
+    "Encrypt" => true, 
     "TrustServerCertificate" => true
 );
 
@@ -24,17 +27,9 @@ if (!$conn) { die(print_r(sqlsrv_errors(), true)); }
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_submit'])) {
-    $role       = $_POST['role'];              
+    $role       = $_POST['role'];               
     $identifier = trim($_POST['identifier']);  
     $password   = $_POST['password'];
-
-    // REMOVED: Strict password regex requirements
-    /* 
-    $regex = '/^(?=.*[!@#$%^&*(),.?":{}|<>]).{16,32}$/';
-    if (!preg_match($regex, $password)) {
-        $error = 'Security Policy: Password must be 16-32 characters and include a special character.';
-    } else { ... }
-    */
 
     $tsql = "SELECT USERID, FIRSTNAME, LASTNAME, PASSWORD, USERTYPE, EMAIL, FAILED_ATTEMPTS, LOCKOUT_TIME FROM [USER] WHERE (EMAIL = ? OR STUDENTID = ?) AND USERTYPE = ?";
     $stmt = sqlsrv_query($conn, $tsql, array($identifier, $identifier, $role));
@@ -43,39 +38,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_submit'])) {
         $now = new DateTime();
         
         if ($row['LOCKOUT_TIME'] && $row['LOCKOUT_TIME'] > $now) {
-            $diff = $row['LOCKOUT_TIME']->diff($now);
-            $error = "Account locked. Try again in " . $diff->i . " minutes.";
+            $error = "Account locked.";
+            logAudit($conn, $row['USERID'], 'LOGIN_BLOCKED', 'Attempted login while account was locked.');
         } else {
-          if (password_verify($password, $row['PASSWORD'])) {
-              sqlsrv_query($conn, "UPDATE [USER] SET FAILED_ATTEMPTS = 0, LOCKOUT_TIME = NULL WHERE USERID = ?", array($row['USERID']));
+            if (password_verify($password, $row['PASSWORD'])) {
+                
+                // UPDATE THIS QUERY TO INCLUDE ISACTIVE = 1
+                sqlsrv_query($conn, "UPDATE [USER] SET FAILED_ATTEMPTS = 0, LOCKOUT_TIME = NULL, ISACTIVE = 1 WHERE USERID = ?", array($row['USERID']));
 
-              $_SESSION['user_id']   = $row['USERID'];
-              $_SESSION['email']     = $row['EMAIL'];
-              $_SESSION['user_role'] = $row['USERTYPE'];
-              $_SESSION['full_name'] = $row['FIRSTNAME'] . ' ' . $row['LASTNAME'];
+                $_SESSION['user_id']   = $row['USERID'];
+                $_SESSION['email']     = $row['EMAIL'];
+                $_SESSION['user_role'] = $row['USERTYPE'];
+                $_SESSION['full_name'] = $row['FIRSTNAME'] . ' ' . $row['LASTNAME'];
 
-              // --- NEW REDIRECT LOGIC ---
-              if ($row['USERTYPE'] === 'admin') {
-                  header('Location: admindashboard.php');
-              } else {
-                  header('Location: dashboard.php');
-              }
-              exit();
-          } else {
+                // LOG SUCCESS
+                logAudit($conn, $row['USERID'], 'LOGIN_SUCCESS', "User logged in as {$row['USERTYPE']}");
+
+                header('Location: ' . ($row['USERTYPE'] === 'admin' ? 'admindashboard.php' : 'dashboard.php'));
+                exit();
+
+            } else {
+                // Failure
                 $attempts = $row['FAILED_ATTEMPTS'] + 1;
                 $lockoutUntil = null;
                 
                 if ($attempts >= 3) {
                     $lockoutUntil = date('Y-m-d H:i:s', strtotime('+15 minutes'));
-                    $error = 'Too many failed attempts. Account locked for 15 minutes.';
+                    $error = 'Too many failed attempts. Account locked.';
+                    logAudit($conn, $row['USERID'], 'ACCOUNT_LOCKOUT', 'Account locked due to 3 failed attempts.');
                 } else {
-                    $error = 'Invalid password. Attempt ' . $attempts . ' of 3.';
+                    $error = "Invalid password. Attempt $attempts of 3.";
+                    logAudit($conn, $row['USERID'], 'LOGIN_FAILURE', "Failed attempt $attempts.");
                 }
                 sqlsrv_query($conn, "UPDATE [USER] SET FAILED_ATTEMPTS = ?, LOCKOUT_TIME = ? WHERE USERID = ?", array($attempts, $lockoutUntil, $row['USERID']));
             }
         }
     } else {
-        $error = 'Account not found for the selected role.';
+        $error = 'Account not found.';
+        // Log unauthorized attempt with unknown user
+        logAudit($conn, null, 'UNAUTHORIZED_ATTEMPT', "Unknown user tried to login as $role with identifier: $identifier");
     }
 }
 ?>

@@ -10,7 +10,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
         <span class="nav-link-text">Statistical Dashboard</span>
     </a>
     
-    <a href="user_statistics.php" class="nav-link <?= ($current_page == 'userstatistics.php') ? 'active' : '' ?>">
+    <a href="userstatistics.php" class="nav-link <?= ($current_page == 'userstatistics.php') ? 'active' : '' ?>">
         <i class="bi bi-people-fill"></i>
         <span class="nav-link-text">User Statistics</span>
     </a>
@@ -22,9 +22,14 @@ $current_page = basename($_SERVER['PHP_SELF']);
 
     <div class="nav-section-label">Management</div>
 
-    <a href="add_location.php" class="nav-link <?= ($current_page == 'addlocation.php') ? 'active' : '' ?>">
+    <a href="addlocation.php" class="nav-link <?= ($current_page == 'addlocation.php') ? 'active' : '' ?>">
         <i class="bi bi-geo-alt-fill"></i>
         <span class="nav-link-text">Add Locations (Map)</span>
+    </a>
+
+        <a href="addevents.php" class="nav-link <?= ($current_page == 'addlocation.php') ? 'active' : '' ?>">
+        <i class="bi bi-geo-alt-fill"></i>
+        <span class="nav-link-text">Add Events (Map)</span>
     </a>
 
     <a href="manage_places.php" class="nav-link <?= ($current_page == 'manageplaces.php') ? 'active' : '' ?>">

@@ -1,6 +1,7 @@
 <?php
-// Get the current file name (e.g., 'dashboard.php')
+// Ensure session variables are accessible (assuming session_start() is called in the parent file)
 $current_page = basename($_SERVER['PHP_SELF']);
+$is_guest = (!isset($_SESSION['user_role']) || $_SESSION['user_role'] === 'guest');
 ?>
 
 <aside class="sidebar" id="sidebar">
@@ -14,10 +15,12 @@ $current_page = basename($_SERVER['PHP_SELF']);
         <span class="nav-link-text">Map</span>
     </a>
     
+    <?php if (!$is_guest): ?>
     <a href="schedule.php" class="nav-link <?= ($current_page == 'schedule.php') ? 'active' : '' ?>">
         <i class="bi bi-calendar3"></i>
         <span class="nav-link-text">Schedule</span>
     </a>
+    <?php endif; ?>
     
     <a href="events.php" class="nav-link <?= ($current_page == 'events.php') ? 'active' : '' ?>">
         <i class="bi bi-calendar-event-fill"></i>
