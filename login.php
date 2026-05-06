@@ -140,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_submit'])) {
     <button type="button" class="tab-btn active" id="tabStudent" onclick="switchTab('student')">Student</button>
     <button type="button" class="tab-btn" id="tabFaculty" onclick="switchTab('faculty')">Faculty</button>
     <button type="button" class="tab-btn" id="tabAdmin" onclick="switchTab('admin')">Admin</button>
-    <a href="guest_dashboard.php" class="guest-link">Guest</a>
+    <a href="guestlogin.php" class="guest-link">Guest</a>
   </div>
 
   <?php if ($error): ?>
