@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>UDMap - New Explorer Registration</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet"/>
+  <style>
+    body {
+      margin: 0; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      background: #011a10; font-family: 'Nunito', sans-serif;
+      color: white; overflow-x: hidden;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    /* Background Glows */
+    .bg-glow {
+      position: absolute; width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(255, 218, 108, 0.05) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .login-card {
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(15px);
+      border: 1px solid rgba(255, 218, 108, 0.3); /* Gold border for signup */
+      border-radius: 30px;
+      padding: 40px;
+      width: 100%; max-width: 450px;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+      z-index: 10;
+    }
+
+    .card-header h2 {
+      font-family: 'Cinzel', serif;
+      font-size: 1.8rem; letter-spacing: 2px;
+      color: #ffda6c; margin-bottom: 10px;
+    }
+
+    .input-row {
+      display: flex; gap: 15px;
+    }
+
+    .input-group { margin-bottom: 15px; text-align: left; flex: 1; }
+    .input-group label { display: block; font-size: 11px; text-transform: uppercase; margin-bottom: 6px; color: rgba(255,255,255,0.6); font-weight: 700; }
+    
+    .input-group input, .input-group select {
+      width: 100%; padding: 12px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px; color: white;
+      font-size: 0.95rem; outline: none; transition: 0.3s;
+      box-sizing: border-box;
+      font-family: 'Nunito', sans-serif;
+      appearance: none; /* For custom select styling */
+      -webkit-appearance: none;
+      -moz-appearance: none;
+    }
+    
+    /* Custom arrow for select */
+    .select-wrapper { position: relative; }
+    .select-wrapper::after {
+      content: "▼";
+      font-size: 0.8rem;
+      color: rgba(255,255,255,0.6);
+      position: absolute; right: 15px; top: 50%;
+      transform: translateY(-50%); pointer-events: none;
+    }
+
+    .input-group input:focus, .input-group select:focus { border-color: #ffda6c; background: rgba(255,255,255,0.1); }
+    
+    /* Styling dropdown options */
+    .input-group select option {
+      background: #011a10;
+      color: white;
+    }
+
+    .btn-submit {
+      width: 100%; padding: 15px;
+      background: transparent;
+      color: #ffda6c; border: 1px dashed #ffda6c;
+      border-radius: 50px; font-weight: 900;
+      text-transform: uppercase; cursor: pointer;
+      transition: 0.3s; margin-top: 15px;
+    }
+    .btn-submit:hover { 
+        background: rgba(255, 218, 108, 0.1); 
+        transform: translateY(-2px); 
+        box-shadow: 0 5px 15px rgba(255, 218, 108, 0.2); 
+    }
+
+    .back-link { margin-top: 20px; display: block; color: rgba(255,255,255,0.4); text-decoration: none; font-size: 14px; }
+    .back-link:hover { color: #fff; }
+  </style>
+</head>
+<body>
+  <div class="bg-glow"></div>
+
+  <div class="login-card">
+    <div class="card-header">
+      <h2>Begin Registration</h2>
+      <p style="font-size: 13px; opacity: 0.7; margin-bottom: 25px;">Create your profile to start your campus journey.</p>
+    </div>
+
+    <form action="register.php" method="POST">
+      
+      <div class="input-row">
+        <div class="input-group">
+          <label>First Name</label>
+          <input type="text" name="firstname" placeholder="Jane" required>
+        </div>
+        <div class="input-group">
+          <label>Last Name</label>
+          <input type="text" name="lastname" placeholder="Doe" required>
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label>Explorer Role</label>
+        <div class="select-wrapper">
+            <select name="role" id="roleSelect" required>
+                <option value="student">Student</option>
+                <option value="faculty">Faculty</option>
+                <option value="admin">Administrator</option>
+            </select>
+        </div>
+      </div>
+
+      <div class="input-group" id="studentIdGroup">
+        <label>Student ID</label>
+        <input type="text" name="studentid" id="studentIdInput" placeholder="e.g. 2024-10001" required>
+      </div>
+
+      <div class="input-group">
+        <label>University Email</label>
+        <input type="email" name="email" placeholder="jane.doe@university.edu" required>
+      </div>
+
+      <div class="input-group">
+        <label>Create Passcode</label>
+        <input type="password" name="password" placeholder="••••••••" required>
+      </div>
+
+      <div class="input-group">
+        <label>Confirm Passcode</label>
+        <input type="password" name="confirm_password" placeholder="••••••••" required>
+      </div>
+
+      <button type="submit" class="btn-submit">Forge Path</button>
+    </form>
+
+    <a href="home.html" class="back-link">← Cancel & Return to Map</a>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const roleSelect = document.getElementById('roleSelect');
+        const studentIdGroup = document.getElementById('studentIdGroup');
+        const studentIdInput = document.getElementById('studentIdInput');
+
+        roleSelect.addEventListener('change', function() {
+            if (this.value === 'student') {
+                studentIdGroup.style.display = 'block';
+                studentIdInput.required = true;
+            } else {
+                studentIdGroup.style.display = 'none';
+                studentIdInput.required = false;
+                studentIdInput.value = ''; // Clear the value just in case
+            }
+        });
+    });
+  </script>
+</body>
+</html>

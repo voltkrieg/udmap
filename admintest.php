@@ -1,18 +1,6 @@
-$2y$10$smkjSa0/YLZzrgR4h5TSJe11R5hJbhvB4kBZDUwfQZ8gO8KL2yBa6<?php
+<?php
 // Database connection settings
-$serverName = "DESKTOP-KILKG9D\SQLEXPRESS";
-$connectionOptions = array(
-    "Database"               => "UDMapDB",
-    "Uid"                    => "", 
-    "PWD"                    => "",
-    "Encrypt"                => true, 
-    "TrustServerCertificate" => true
-);
-
-$conn = sqlsrv_connect($serverName, $connectionOptions);
-if (!$conn) {
-    die(print_r(sqlsrv_errors(), true));
-}
+require_once 'db.php';
 
 // Admin Details
 $firstName = "System";

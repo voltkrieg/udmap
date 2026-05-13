@@ -1,16 +1,6 @@
 <?php
 session_start();
-
-// --- Database Connection (Optional: Only needed if logging guest visits) ---
-$serverName = "DESKTOP-KILKG9D\SQLEXPRESS";
-$connectionOptions = array(
-    "Database" => "UDMapDB",
-    "Uid" => "", 
-    "PWD" => "",
-    "Encrypt" => true, 
-    "TrustServerCertificate" => true
-);
-$conn = sqlsrv_connect($serverName, $connectionOptions);
+require_once 'db.php';
 
 // Set explicit session variables for the Guest
 $_SESSION['user_id']   = 0; // Or null, depending on how your other pages check ID

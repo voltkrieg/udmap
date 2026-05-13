@@ -1,78 +1,255 @@
 <?php
 session_start();
 
-$server = "DESKTOP-KILKG9D\SQLEXPRESS";
-$opts = ["Database" => "UDMapDB", "Uid" => "", "PWD" => "", "Encrypt" => true, "TrustServerCertificate" => true];
-$conn = sqlsrv_connect($server, $opts);
+require_once 'db.php';
 
-if (!$conn) { die("Database error"); }
+if (!isset($_SESSION['user_id']) && !isset($_SESSION['user']['id'])) {
+    header('Location: index.php');
+    exit();
+}
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
+$id = (int)($_SESSION['user_id'] ?? $_SESSION['user']['id']);
+$_SESSION['user_id'] = $id;
+$role = isset($_SESSION['role']) ? strtolower($_SESSION['role']) : '';
+
+if ($role === 'admin') {
+    header('Location: admindashboard.php');
+    exit();
+} elseif ($role === 'faculty') {
+    header('Location: facultydashboard.php');
     exit();
 }
 
 $id = (int)$_SESSION['user_id'];
-$name = $_SESSION['first_name'] ?? 'User';
+$name = 'User'; // Fallback
+
+$userStmt = $conn->prepare("SELECT firstname FROM users WHERE id = ?");
+if ($userStmt) {
+    $userStmt->bind_param("i", $id);
+    $userStmt->execute();
+    $userRes = $userStmt->get_result();
+    if ($uRow = $userRes->fetch_assoc()) {
+        $name = htmlspecialchars($uRow['firstname']); 
+    }
+    $userStmt->close();
+}
 
 $day = date('l');
-$now = date('H:i:s');
-$map = ['Monday'=>'M','Tuesday'=>'T','Wednesday'=>'W','Thursday'=>'Th','Friday'=>'F','Saturday'=>'S','Sunday'=>'Su'];
-$short = $map[$day] ?? $day;
+$map = ['Monday'=>'M','Tuesday'=>'T','Wednesday'=>'W','Thursday'=>'H','Friday'=>'F','Saturday'=>'S','Sunday'=>'SU'];
+$short = $map[$day] ?? 'M';
+
 
 $schedArr = [];
-$res = sqlsrv_query($conn, "SELECT * FROM CLASS WHERE USERID = ? AND (DAY = ? OR DAY = ?) ORDER BY TIMESTART", [$id, $day, $short]);
-while ($r = sqlsrv_fetch_array($res, SQLSRV_FETCH_ASSOC)) { $schedArr[] = $r; }
+$stmt = $conn->prepare("SELECT * FROM class WHERE profid = ? AND day = ? ORDER BY timestart");
+if ($stmt) {
+    $stmt->bind_param("is", $id, $short);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    while ($r = $res->fetch_assoc()) { $schedArr[] = $r; }
+    $stmt->close();
+}
 
 $events = [];
-$eRes = sqlsrv_query($conn, "SELECT TOP 2 * FROM EVENTS WHERE DATE >= CAST(GETDATE() AS DATE) ORDER BY DATE, TIMESTART");
-while ($r = sqlsrv_fetch_array($eRes, SQLSRV_FETCH_ASSOC)) { $events[] = $r; }
+$eRes = $conn->query("SELECT eventname, description, dtstart, locid FROM event WHERE dtstart >= NOW() ORDER BY dtstart LIMIT 2");
+if ($eRes) {
+    while ($r = $eRes->fetch_assoc()) { $events[] = $r; }
+}
 
+function getIconForType($type) {
+    switch(strtolower($type)) {
+        case 'food': return 'bi-shop';
+        case 'class': return 'bi-book';
+        case 'services': return 'bi-info-circle';
+        case 'library': return 'bi-journal-bookmark';
+        case 'venue': return 'bi-geo-alt-fill';
+        default: return 'bi-building';
+    }
+}
 
 $locationsArr = [];
-$locQuery = "SELECT BLDGID, NAME, BLDGTYPE, LONGNAME, LATITUDE, LONGITUDE, DESCRIPTION, ISACTIVE, FLOORS, ICON FROM LOCATIONS WHERE ISACTIVE = 1";
-$locRes = sqlsrv_query($conn, $locQuery);
+$locQuery = "SELECT id AS BLDGID, abbreviation AS NAME, type AS BLDGTYPE, fullname AS LONGNAME, 
+                    lattitude AS LATITUDE, longitude AS LONGITUDE, description AS DESCRIPTION, floors AS FLOORS 
+             FROM location";
+$locRes = $conn->query($locQuery);
 
 if ($locRes) {
-    while ($row = sqlsrv_fetch_array($locRes, SQLSRV_FETCH_ASSOC)) {
-        // Ensure lat/lng are cast to floats so JavaScript processes them correctly
+    while ($row = $locRes->fetch_assoc()) {
         $row['LATITUDE'] = (float)$row['LATITUDE'];
         $row['LONGITUDE'] = (float)$row['LONGITUDE'];
+        $row['ICON'] = getIconForType($row['BLDGTYPE']);
+        $row['ISACTIVE'] = 1;
         $locationsArr[] = $row;
     }
 }
 
-function timeFix($t) { 
-    return ($t instanceof DateTime) ? $t->format('h:i A') : date('h:i A', strtotime($t)); 
-}
+function timeFix($t) { return date('h:i A', strtotime($t)); }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>UDMap - Dashboard</title>
-    <!-- Bootstrap CSS -->
+    <title>UDMap - Explorer Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     
-    <!-- Leaflet CSS (2D Map) -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Nunito:wght@400;600;700;900&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
-    <!-- MapLibre GL CSS (for OpenFreeMap 3D) -->
     <link href="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.css" rel="stylesheet" />
 
     <style>
-        body { font-family: 'Nunito', sans-serif; background: #f4f4f4; color: #111; display: flex; flex-direction: column; min-height: 100vh; }
-        .ud-topbar { background: #2ECC40; height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; position: sticky; top: 0; z-index: 1001; color: white; }
+        :root {
+            --star-gold: #ffda6c;
+            --firefly-glow: #b6ff92;
+            --bg-dark: #011a10;
+            --card-bg: rgba(2, 36, 21, 0.85);
+            --border-glow: rgba(182, 255, 146, 0.3);
+            --gradient-btn: linear-gradient(90deg, #014d31, #013220);
+        }
+
+        body { 
+            font-family: 'Nunito', sans-serif; 
+            background: var(--bg-dark); 
+            color: #fff; 
+            display: flex; 
+            flex-direction: column; 
+            min-height: 100vh; 
+            overflow-x: hidden;
+        }
+
+        /* Ambient Background Glow */
+        body::before {
+            content: ""; position: fixed; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: radial-gradient(circle at 50% 50%, rgba(107, 255, 216, 0.03) 0%, transparent 60%);
+            z-index: -1; pointer-events: none;
+        }
+
+        /* Topbar styling */
+        .ud-topbar { 
+            background: #000; 
+            height: 60px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            padding: 0 20px; 
+            position: sticky; 
+            top: 0; 
+            z-index: 1001; 
+            border-bottom: 1px solid var(--star-gold);
+            box-shadow: 0 0 15px rgba(255, 218, 108, 0.2);
+        }
+        
+        .ud-title {
+            font-family: 'Cinzel', serif;
+            color: var(--star-gold);
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(255, 218, 108, 0.5);
+        }
+
         .page-wrap { display: flex; flex: 1; }
-        .content-area { flex: 1; padding: 20px; margin-left: 230px; display: grid; grid-template-columns: 1fr 370px; gap: 20px; transition: margin 0.25s; }
+        .content-area { flex: 1; padding: 25px; margin-left: 230px; display: grid; grid-template-columns: 1fr 370px; gap: 25px; transition: margin 0.25s; }
         .sidebar.collapsed + .content-area { margin-left: 54px; }
-        .info-card { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        .btn-green { background: #2ECC40; color: white; border: none; border-radius: 8px; padding: 8px 16px; font-weight: 800; text-decoration: none; }
-        .map-panel { background: #d4d4d4; border-radius: 0 0 16px 16px; height: 500px; width: 100%; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #666; position: relative; }
-        .nav-tabs .nav-link { font-weight: 700; color: #666; border-radius: 16px 16px 0 0; }
-        .nav-tabs .nav-link.active { color: #2ECC40; }
+
+        /* Thematic Cards */
+        .info-card { 
+            background: var(--card-bg); 
+            border-radius: 12px; 
+            padding: 24px; 
+            border: 1px solid var(--border-glow);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.6); 
+            backdrop-filter: blur(5px);
+        }
+        
+        .info-card-title {
+            font-family: 'Cinzel', serif;
+            color: var(--star-gold);
+            border-bottom: 1px solid rgba(255,218,108,0.2);
+            padding-bottom: 12px;
+            margin-bottom: 15px;
+            letter-spacing: 1px;
+        }
+
+        /* Thematic Buttons */
+        .btn-quest { 
+            background: var(--gradient-btn); 
+            color: white; 
+            border: 1px solid var(--firefly-glow); 
+            border-radius: 8px; 
+            padding: 10px 16px; 
+            font-weight: 800; 
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-decoration: none; 
+            transition: all 0.3s ease;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        .btn-quest:hover {
+            background: #015c3a;
+            color: #fff;
+            box-shadow: 0 0 15px var(--firefly-glow);
+            transform: translateY(-2px);
+        }
+
+        /* Map UI Styling */
+        .map-panel { 
+            background: #0a0a0a; 
+            border-radius: 0 0 12px 12px; 
+            height: 550px; 
+            width: 100%; 
+            position: relative; 
+            border: 1px solid var(--border-glow);
+            border-top: none;
+        }
+        
+        /* Map Tabs */
+        .nav-tabs { border-bottom: none; gap: 5px; }
+        .nav-tabs .nav-link { 
+            font-weight: 700; 
+            color: rgba(255,255,255,0.6); 
+            background: rgba(0,0,0,0.4);
+            border: 1px solid var(--border-glow);
+            border-bottom: none;
+            border-radius: 12px 12px 0 0; 
+            padding: 12px 20px;
+            font-family: 'Cinzel', serif;
+            letter-spacing: 1px;
+            transition: 0.3s;
+        }
+        .nav-tabs .nav-link:hover { color: #fff; background: rgba(2, 36, 21, 0.6); border-color: var(--firefly-glow); }
+        .nav-tabs .nav-link.active { 
+            color: var(--star-gold); 
+            background: var(--card-bg);
+            border-color: var(--border-glow);
+            text-shadow: 0 0 8px rgba(255, 218, 108, 0.4);
+        }
+        
+        .tab-content { border-radius: 0 0 12px 12px; }
+
+        /* Dark Theme Overrides for Map Popups */
+        .leaflet-popup-content-wrapper, .maplibregl-popup-content {
+            background: #012a1a !important;
+            color: #fff !important;
+            border: 1px solid var(--star-gold);
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8) !important;
+        }
+        .leaflet-popup-tip, .maplibregl-popup-tip {
+            border-top-color: #012a1a !important;
+        }
+        .leaflet-popup-close-button, .maplibregl-popup-close-button {
+            color: var(--star-gold) !important;
+        }
+
+        /* Darken the 2D map slightly to fit the theme */
+        .leaflet-layer, .leaflet-control-zoom-in, .leaflet-control-zoom-out, .leaflet-control-attribution {
+            filter: brightness(0.8) contrast(1.1) saturate(0.8);
+        }
+
+        /* Utility */
+        .text-muted { color: rgba(255,255,255,0.5) !important; }
+        .border-bottom { border-bottom: 1px dashed rgba(255,255,255,0.1) !important; }
         
         @media(max-width: 960px) { .content-area { grid-template-columns: 1fr; margin-left: 0; } }
     </style>
@@ -81,322 +258,111 @@ function timeFix($t) {
 
 <header class="ud-topbar">
     <div class="d-flex align-items-center">
-        <button class="btn text-white fs-4 p-0 me-3" onclick="toggleSidebar()"><i class="bi bi-list"></i></button>
-        <span class="fw-bolder fs-5">UDMap</span>
+        <button class="btn text-white fs-4 p-0 me-3" onclick="toggleSidebar()" style="opacity: 0.8;"><i class="bi bi-list"></i></button>
+        <span class="fs-4 ud-title">UDMap</span>
     </div>
-    <span class="small fw-bold">Hello, <?= $name ?></span>
+    <span class="small fw-bold" style="color: var(--firefly-glow);">Explorer: <?= $name ?></span>
 </header>
 
 <div class="page-wrap">
     <?php include 'sidebar.php'; ?>
 
     <main class="content-area">
-        <!-- MAP TABS SECTION -->
         <div class="d-flex flex-column">
-            <ul class="nav nav-tabs border-0" id="mapTabs" role="tablist">
+            <ul class="nav nav-tabs" id="mapTabs" role="tablist">
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link active border-0" id="view-2d-tab" data-bs-toggle="tab" data-bs-target="#view-2d" type="button" role="tab" aria-controls="view-2d" aria-selected="true"><i class="bi bi-map me-2"></i>2D Top View</button>
+                    <button class="nav-link active" id="view-2d-tab" data-bs-toggle="tab" data-bs-target="#view-2d" type="button" role="tab" aria-controls="view-2d" aria-selected="true"><i class="bi bi-map me-2"></i>Atlas View</button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link border-0" id="view-3d-tab" data-bs-toggle="tab" data-bs-target="#view-3d" type="button" role="tab" aria-controls="view-3d" aria-selected="false"><i class="bi bi-buildings me-2"></i>3D View</button>
+                    <button class="nav-link" id="view-3d-tab" data-bs-toggle="tab" data-bs-target="#view-3d" type="button" role="tab" aria-controls="view-3d" aria-selected="false"><i class="bi bi-buildings me-2"></i>Realm View (3D)</button>
                 </li>
             </ul>
             
-            <div class="tab-content bg-white rounded-bottom-4 shadow-sm" id="mapTabsContent">
-                <!-- 2D Map Container -->
+            <div class="tab-content shadow-lg" id="mapTabsContent">
                 <div class="tab-pane fade show active" id="view-2d" role="tabpanel" aria-labelledby="view-2d-tab">
                     <div id="mapContainer2D" class="map-panel"></div>
                 </div>
-                <!-- 3D Map Container -->
                 <div class="tab-pane fade" id="view-3d" role="tabpanel" aria-labelledby="view-3d-tab">
                     <div id="mapContainer3D" class="map-panel"></div>
                 </div>
             </div>
         </div>
 
-        <div class="d-flex flex-column gap-3">
+        <div class="d-flex flex-column gap-4">
+            
             <div class="info-card">
-                <h2 class="fs-5 fw-bold mb-3">Schedule <small class="text-muted fs-6"><?= $day ?></small></h2>
+                <h2 class="fs-5 fw-bold info-card-title d-flex justify-content-between align-items-end">
+                    <span><i class="bi bi-journal-text me-2"></i>Active Quests</span>
+                    <small class="text-muted fs-6" style="font-family: 'Nunito', sans-serif;"><?= $day ?></small>
+                </h2>
                 <?php if(empty($schedArr)): ?>
-                    <p class="text-muted small">Nothing today.</p>
+                    <p class="text-muted small text-center py-3">No active quests for today.</p>
                 <?php else: ?>
                     <?php foreach($schedArr as $c): ?>
                         <div class="d-flex justify-content-between mb-3 border-bottom pb-2">
                             <div>
-                                <div class="fw-bold"><?= htmlspecialchars($c['COURSETITLE']) ?></div>
-                                <div class="text-muted small"><?= htmlspecialchars($c['COURSECODE']) ?></div>
+                                <div class="fw-bold" style="color: var(--firefly-glow);"><?= htmlspecialchars($c['coursetitle']) ?></div>
+                                <div class="text-muted small"><?= htmlspecialchars($c['coursecode']) ?></div>
                             </div>
                             <div class="text-end">
-                                <div class="fw-bold"><?= timeFix($c['TIMESTART']) ?></div>
-                                <div class="text-muted small">to <?= timeFix($c['TIMEEND']) ?></div>
+                                <div class="fw-bold"><?= timeFix($c['timestart']) ?></div>
+                                <div class="text-muted small">to <?= timeFix($c['timeend']) ?></div>
                             </div>
                         </div>
                     <?php endforeach; ?>
                 <?php endif; ?>
-                <a href="schedule.php" class="btn-green w-100 d-block text-center mt-2">View Full List</a>
+                <a href="schedule.php" class="btn btn-quest w-100 d-block text-center mt-3">View Quest Log</a>
             </div>
 
             <div class="info-card">
-                <h2 class="fs-5 fw-bold mb-3">Next Events</h2>
-                <?php foreach($events as $e): ?>
-                    <div class="mb-3">
-                        <div class="text-success fw-bold small"><?= $e['DATE']->format('M d') ?></div>
-                        <div class="fw-bold"><?= htmlspecialchars($e['EVENTTITLE']) ?></div>
-                        <div class="small text-muted"><i class="bi bi-geo-alt me-1"></i><?= htmlspecialchars($e['PLACE']) ?></div>
-                    </div>
-                <?php endforeach; ?>
-                <a href="events.php" class="btn-green w-100 d-block text-center mt-2">All Events</a>
+                <h2 class="fs-5 fw-bold info-card-title"><i class="bi bi-stars me-2"></i>Upcoming Events</h2>
+                <?php if(empty($events)): ?>
+                     <p class="text-muted small text-center py-3">The realm is quiet.</p>
+                <?php else: ?>
+                    <?php foreach($events as $e): ?>
+                        <div class="mb-3 border-bottom pb-2">
+                            <div class="fw-bold small" style="color: var(--star-gold);">
+                            <i class="bi bi-calendar-event me-1"></i> <?= date('M d', strtotime($e['dtstart'])) ?>
+                            </div>
+                            <div class="fw-bold fs-6 mt-1"><?= htmlspecialchars($e['eventname']) ?></div>
+                            <div class="small text-muted mt-1"><i class="bi bi-geo-alt me-1"></i>Location ID: <?= htmlspecialchars($e['locid']) ?></div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+                <a href="events.php" class="btn btn-quest w-100 d-block text-center mt-3">All Events</a>
             </div>
+            
         </div>
     </main>
 </div>
 
-<!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<!-- Leaflet JS (2D) -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<!-- MapLibre GL JS (3D OpenFreeMap) -->
 <script src="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.js"></script>
 
 <script>
-// --- Data Setup ---
-var locations = <?= json_encode($locationsArr, JSON_NUMERIC_CHECK) ?>;
+    const locationsData = <?= json_encode($locationsArr); ?>;
+</script>
 
-var markers2D = {};
-var markers3D = {};
-var centerCoords = [14.32464, 120.96016]; // [lat, lng]
-
-// Color mapping object based on building types
-const typeColors = {
-    'Academic': '#2ECC40',
-    'Services': '#dc3545',
-    'Sports': '#6f42c1',
-    'Food Hubs': '#fd7e14',
-    'Offices': '#0d6efd'
-};
-
-// Helper function to create interactive popup content WITH Routing Buttons
-function createPopupContent(loc) {
-    return `
-        <div style="font-family: 'Nunito', sans-serif; min-width: 180px;">
-            <h6 class="mb-1 fw-bold text-success">${loc.LONGNAME} (${loc.NAME})</h6>
-            <p class="mb-1 text-muted small"><i class="bi ${loc.ICON} me-1"></i>${loc.BLDGTYPE}</p>
-            <p class="mb-1" style="font-size: 13px;">${loc.DESCRIPTION}</p>
-            <p class="mb-2 text-muted" style="font-size: 12px;">Floors: <b>${loc.FLOORS}</b></p>
-            <div class="d-flex gap-2 border-top pt-2">
-                <button class="btn btn-sm btn-outline-primary w-50" onclick="getRoute(${loc.LATITUDE}, ${loc.LONGITUDE}, 'foot')"><i class="bi bi-person-walking"></i> Walk</button>
-                <button class="btn btn-sm btn-outline-success w-50" onclick="getRoute(${loc.LATITUDE}, ${loc.LONGITUDE}, 'driving')"><i class="bi bi-car-front"></i> Drive</button>
-            </div>
-        </div>
-    `;
-}
-
-// ==========================================
-// 1. INITIALIZE 2D MAP (Leaflet)
-// ==========================================
-var map2d = L.map('mapContainer2D').setView(centerCoords, 17);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20 }).addTo(map2d);
-
-locations.forEach(function(loc) {
-    if(loc.ISACTIVE) {
-        var pinColor = typeColors[loc.BLDGTYPE] || '#6c757d'; // Default grey if type not found
-        var iconHtml = `<div style="background:${pinColor}; width:28px; height:28px; border-radius:50%; border:2px solid white; display:flex; align-items:center; justify-content:center; color:white; font-size:14px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); cursor: pointer;"><i class="bi ${loc.ICON || 'bi-geo-alt'}"></i></div>`;
-        
-        var marker = L.marker([loc.LATITUDE, loc.LONGITUDE], {
-            icon: L.divIcon({ html: iconHtml, className: '', iconSize: [28, 28], iconAnchor: [14, 14] })
-        }).addTo(map2d).bindPopup(createPopupContent(loc));
-        
-        markers2D[loc.NAME.toLowerCase()] = marker;
-    }
-});
-
-
-// ==========================================
-// 2. INITIALIZE 3D MAP (OpenFreeMap via MapLibre)
-// ==========================================
-// Completely free, no access tokens needed!
-var map3d = new maplibregl.Map({
-    container: 'mapContainer3D',
-    style: 'https://tiles.openfreemap.org/styles/liberty', // OpenFreeMap Liberty Style
-    center: [centerCoords[1], centerCoords[0]], // [lng, lat]
-    zoom: 16.5,
-    pitch: 60, // Tilts the camera for 3D effect
-    bearing: -20,
-    antialias: true
-});
-
-map3d.on('load', () => {
-    // OpenFreeMap usually provides building footprints under 'openmaptiles' source
-    // We add an extrusion layer to make them 3D
-    const layers = map3d.getStyle().layers;
-    let labelLayerId;
-    
-    // Find the first symbol layer to place buildings underneath labels
-    for (let i = 0; i < layers.length; i++) {
-        if (layers[i].type === 'symbol' && layers[i].layout['text-field']) {
-            labelLayerId = layers[i].id;
-            break;
+<script src="js/map-handler.js" defer></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        if(typeof initMapSystem === 'function') {
+            initMapSystem(''); 
         }
-    }
-
-    map3d.addLayer({
-        'id': 'add-3d-buildings',
-        'source': 'openmaptiles', // OpenFreeMap relies on the openmaptiles schema
-        'source-layer': 'building',
-        'type': 'fill-extrusion',
-        'minzoom': 15,
-        'paint': {
-            'fill-extrusion-color': '#aaa',
-            'fill-extrusion-height': ['get', 'render_height'], // Schema specific height variable
-            'fill-extrusion-base': ['get', 'render_min_height'],
-            'fill-extrusion-opacity': 0.6
-        }
-    }, labelLayerId);
-});
-
-// Add Markers to 3D Map
-locations.forEach(function(loc) {
-    if(loc.ISACTIVE) {
-        var pinColor = typeColors[loc.BLDGTYPE] || '#6c757d'; // Default grey if type not found
-        
-        var el = document.createElement('div');
-        el.innerHTML = `<div style="background:${pinColor}; width:28px; height:28px; border-radius:50%; border:2px solid white; display:flex; align-items:center; justify-content:center; color:white; font-size:14px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); cursor: pointer; transition: transform 0.2s;"><i class="bi ${loc.ICON || 'bi-geo-alt'}"></i></div>`;
-        
-        el.addEventListener('mouseenter', () => el.style.transform = 'scale(1.2)');
-        el.addEventListener('mouseleave', () => el.style.transform = 'scale(1)');
-
-        var popup = new maplibregl.Popup({ offset: 25 }).setHTML(createPopupContent(loc));
-        
-        var marker3d = new maplibregl.Marker(el)
-            .setLngLat([loc.LONGITUDE, loc.LATITUDE])
-            .setPopup(popup)
-            .addTo(map3d);
-            
-        markers3D[loc.NAME.toLowerCase()] = marker3d;
-    }
-});
-
-
-// ==========================================
-// 3. DIRECTIONS / ROUTING LOGIC
-// ==========================================
-window.routeLine2D = null;
-window.userMarker2D = null;
-window.userMarker3D = null;
-
-function getRoute(destLat, destLng, profile) {
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(function(position) {
-            var userLat = position.coords.latitude;
-            var userLng = position.coords.longitude;
-            fetchAndDrawRoute(userLng, userLat, destLng, destLat, profile);
-        }, function(error) {
-            alert("Unable to retrieve your location. Please allow location access in your browser.");
-        });
-    } else {
-        alert("Geolocation is not supported by this browser.");
-    }
-}
-
-function fetchAndDrawRoute(startLng, startLat, endLng, endLat, profile) {
-    var url = `https://router.project-osrm.org/route/v1/${profile}/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
-    
-    fetch(url)
-    .then(res => res.json())
-    .then(data => {
-        if(data.routes && data.routes.length > 0) {
-            var coords = data.routes[0].geometry.coordinates;
-            drawRoute2D(coords, startLat, startLng);
-            drawRoute3D(coords, startLat, startLng);
-            
-            map2d.closePopup();
-            document.querySelectorAll('.maplibregl-popup').forEach(p => p.remove()); // Updated class name
-        } else {
-            alert("Could not find a valid route.");
-        }
-    }).catch(err => {
-        console.error("Routing error:", err);
-        alert("An error occurred while fetching the route.");
     });
-}
 
-function drawRoute2D(coords, userLat, userLng) {
-    var latlngs = coords.map(c => [c[1], c[0]]);
-    
-    if (window.routeLine2D) { map2d.removeLayer(window.routeLine2D); }
-    if (window.userMarker2D) { map2d.removeLayer(window.userMarker2D); }
-    
-    window.routeLine2D = L.polyline(latlngs, {color: '#0d6efd', weight: 6, opacity: 0.8}).addTo(map2d);
-    
-    window.userMarker2D = L.marker([userLat, userLng], {
-        icon: L.divIcon({ html: '<div style="background:#dc3545; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>', className: '' })
-    }).addTo(map2d).bindPopup("Your Location");
-
-    map2d.fitBounds(window.routeLine2D.getBounds(), { padding: [50, 50] });
-}
-
-function drawRoute3D(coords, userLat, userLng) {
-    if (window.userMarker3D) { window.userMarker3D.remove(); }
-    
-    var userEl = document.createElement('div');
-    userEl.style.cssText = 'background:#dc3545; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);';
-    window.userMarker3D = new maplibregl.Marker(userEl).setLngLat([userLng, userLat]).addTo(map3d);
-
-    if (map3d.getSource('route')) {
-        map3d.getSource('route').setData({
-            type: 'Feature',
-            properties: {},
-            geometry: { type: 'LineString', coordinates: coords }
-        });
-    } else {
-        map3d.addSource('route', {
-            type: 'geojson',
-            data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } }
-        });
-        map3d.addLayer({
-            id: 'route',
-            type: 'line',
-            source: 'route',
-            layout: { 'line-join': 'round', 'line-cap': 'round' },
-            paint: { 'line-color': '#0d6efd', 'line-width': 6, 'line-opacity': 0.8 }
-        });
-    }
-    
-    var bounds = coords.reduce(function(bounds, coord) {
-        return bounds.extend(coord);
-    }, new maplibregl.LngLatBounds(coords[0], coords[0]));
-    map3d.fitBounds(bounds, { padding: 50 });
-}
-
-
-// ==========================================
-// 4. UI CONTROLS & TAB RESIZING
-// ==========================================
-document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tab => {
-    tab.addEventListener('shown.bs.tab', event => {
-        map2d.invalidateSize(); 
-        map3d.resize();         
-    });
-});
-
-function focusEvent(placeName) {
-    var key = placeName.toLowerCase();
-    var is3DActive = document.getElementById('view-3d-tab').classList.contains('active');
-    
-    if (is3DActive) {
-        if (markers3D[key]) {
+    function focusEvent(placeName) {
+        const key = placeName.toLowerCase();
+        const is3DActive = document.getElementById('view-3d-tab').classList.contains('active');
+        if (is3DActive && markers3D[key]) {
             map3d.flyTo({ center: markers3D[key].getLngLat(), zoom: 19 });
             markers3D[key].togglePopup();
-        }
-    } else {
-        if (markers2D[key]) {
+        } else if (markers2D[key]) {
             map2d.setView(markers2D[key].getLatLng(), 19);
             markers2D[key].openPopup();
         }
     }
-}
-
-function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
 </script>
 </body>
 </html>

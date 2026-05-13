@@ -27,19 +27,19 @@ $current_page = basename($_SERVER['PHP_SELF']);
         <span class="nav-link-text">Add Locations (Map)</span>
     </a>
 
-        <a href="addevents.php" class="nav-link <?= ($current_page == 'addlocation.php') ? 'active' : '' ?>">
-        <i class="bi bi-geo-alt-fill"></i>
+    <a href="addevents.php" class="nav-link <?= ($current_page == 'addevents.php') ? 'active' : '' ?>">
+        <i class="bi bi-calendar-event-fill"></i>
         <span class="nav-link-text">Add Events (Map)</span>
     </a>
 
-    <a href="manage_places.php" class="nav-link <?= ($current_page == 'manageplaces.php') ? 'active' : '' ?>">
+    <a href="manage_places.php" class="nav-link <?= ($current_page == 'manage_places.php') ? 'active' : '' ?>">
         <i class="bi bi-image-fill"></i>
         <span class="nav-link-text">Add Place & Pictures</span>
     </a>
 
 
     <div class="sidebar-footer">
-        <a href="logout.php" class="nav-link text-danger p-0">
+        <a href="logout.php" class="nav-link text-danger logout-link p-0">
             <i class="bi bi-box-arrow-left"></i>
             <span class="nav-link-text">Log Out</span>
         </a>
@@ -47,87 +47,90 @@ $current_page = basename($_SERVER['PHP_SELF']);
 </aside>
 
 <style>
-    :root {
-        --primary: #2ECC40;
-        --bg-hover: #f0fdf2;
-        --sidebar-w: 230px;
-        --sidebar-c: 54px;
-        --danger: #e74c3c;
-    }
-
     .sidebar {
-        width: var(--sidebar-w);
-        background: #fff;
-        border-right: 1px solid #e8e8e8;
+        width: 230px;
+        background: rgba(1, 26, 16, 0.95);
+        border-right: 1px solid var(--border-glow);
         display: flex;
         flex-direction: column;
         padding: 12px 0;
-        height: calc(100vh - 54px);
+        height: calc(100vh - 60px); 
         position: fixed;
-        top: 54px;
+        top: 60px;
         left: 0;
         transition: width .25s ease;
         z-index: 1000;
+        backdrop-filter: blur(10px);
+        box-shadow: 2px 0 15px rgba(0, 0, 0, 0.5);
     }
 
-    /* Section Labels */
     .sidebar .nav-section-label {
-        font-size: .65rem;
-        font-weight: 800;
-        color: #aaa;
+        font-size: .75rem;
+        font-family: 'Cinzel', serif;
+        font-weight: 700;
+        color: var(--star-gold);
         text-transform: uppercase;
         padding: 20px 20px 8px;
-        letter-spacing: 1px;
+        letter-spacing: 2px;
+        text-shadow: 0 0 5px rgba(255, 218, 108, 0.3);
     }
 
     .sidebar .nav-link {
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 10px 20px;
-        font-size: .88rem;
-        font-weight: 700;
-        color: #444;
+        padding: 12px 20px;
+        font-size: .9rem;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.6);
         text-decoration: none;
-        transition: all 0.2s;
+        transition: all 0.3s ease;
     }
 
     .sidebar .nav-link:hover { 
-        background: var(--bg-hover); 
-        color: var(--primary); 
+        background: rgba(182, 255, 146, 0.05); 
+        color: var(--firefly-glow); 
+        text-shadow: 0 0 8px rgba(182, 255, 146, 0.4);
     }
 
     .sidebar .nav-link.active { 
-        background: #eafbec; 
-        color: var(--primary); 
-        border-right: 3px solid var(--primary); 
+        background: rgba(2, 36, 21, 0.85); 
+        color: var(--firefly-glow); 
+        border-right: 3px solid var(--firefly-glow); 
+        box-shadow: inset 5px 0 15px rgba(182, 255, 146, 0.1);
+        text-shadow: 0 0 8px rgba(182, 255, 146, 0.5);
     }
 
     .sidebar .nav-link i { 
-        font-size: 1.1rem; 
-        width: 20px; 
+        font-size: 1.2rem; 
+        width: 24px; 
         text-align: center; 
+        color: inherit;
     }
 
-    /* Collapsed States */
-    .sidebar.collapsed { width: var(--sidebar-c); }
+    .sidebar.collapsed { width: 54px; }
     .sidebar.collapsed .nav-link-text, 
     .sidebar.collapsed .nav-section-label { display: none; }
-    .sidebar.collapsed .nav-link { justify-content: center; padding: 12px 0; border-right: none; }
+    .sidebar.collapsed .nav-link { justify-content: center; padding: 15px 0; border-right: none; }
 
-    /* Footer / Logout */
     .sidebar-footer { 
         margin-top: auto; 
-        border-top: 1px solid #eee; 
+        border-top: 1px dashed rgba(255, 255, 255, 0.1); 
         padding: 15px 20px; 
     }
     
-    .sidebar-footer .nav-link-text {
-        color: var(--danger);
+    .sidebar-footer .logout-link {
+        color: #ff6b6b !important;
+        padding: 10px 0;
     }
 
-    /* Mobile handling */
-    @media(max-width: 640px) {
+    .sidebar-footer .logout-link:hover {
+        background: transparent;
+        color: #ff8787 !important;
+        text-shadow: 0 0 8px rgba(255, 107, 107, 0.6);
+    }
+
+    @media(max-width: 960px) {
         .sidebar { transform: translateX(-100%); }
         .sidebar.mobile-open { transform: translateX(0); }
     }
